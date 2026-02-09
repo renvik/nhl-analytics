@@ -1,0 +1,13 @@
+# --- API & Networking ---
+httpx           # Modern async-capable HTTP client
+
+# --- Data Modeling & Validation ---
+pydantic        # Schema enforcement (The "No-Black-Box" tool)
+python-dotenv   # Managing .env configuration safely
+
+# --- Data Transformation ---
+pandas          # Local data manipulation
+pyarrow         # Support for Parquet files (Azure/Cloud standard)
+
+# --- Quality & Testing ---
+pytest          # The standard for Python testing
