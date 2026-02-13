@@ -13,6 +13,9 @@ from .models import Record, StandingsSnapshot, Team, TeamStandings
 # Fixed endpoint for the final day of the 2024–2025 regular season
 STANDINGS_URL = "https://api-web.nhle.com/v1/standings/2025-04-16"
 
+# Skater stats leaders: season 20242025, 2 = goals
+GOAL_LEADERS_URL = "https://api-web.nhle.com/v1/skater-stats-leaders/20242025/2"
+
 # Project-relative data directory (…/nhl-analytics/data/raw)
 _BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DATA_DIR = _BASE_DIR / "data" / "raw"
@@ -173,6 +176,20 @@ def save_snapshot(snapshot: StandingsSnapshot) -> str:
     with path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
+    return str(path)
+
+
+async def fetch_goal_leaders() -> str:
+    """Fetch goal leaders for 2024–2025 and save raw JSON to Bronze (data/raw)."""
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        resp = await client.get(GOAL_LEADERS_URL)
+        resp.raise_for_status()
+        data = resp.json()
+
+    RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    path = RAW_DATA_DIR / "goal_leaders_20242025.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
     return str(path)
 
 

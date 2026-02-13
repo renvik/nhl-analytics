@@ -90,3 +90,12 @@ class StandingsSnapshot(BaseModel):
         description="Standings entries for all teams returned by the endpoint.",
     )
 
+
+class SkaterLeader(BaseModel):
+    """Player-level skater leader entry (e.g. goal leaders)."""
+
+    playerId: int = Field(..., description="Unique player identifier (NHL internal ID)")
+    firstName: str = Field(..., description="Player first name")
+    lastName: str = Field(..., description="Player last name")
+    value: int = Field(..., ge=0, description="Stat value, e.g. goals for goal leaders")
+
