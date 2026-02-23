@@ -9,10 +9,13 @@ env/
 
 # --- Project Specific Data ---
 # Track the folders, but ignore the actual files inside
+*.md
+data/
 data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/silver/.gitkeep
 
 # --- IDE & OS ---
 .vscode/
