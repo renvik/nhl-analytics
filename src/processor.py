@@ -40,6 +40,9 @@ def load_standings(path: Path | None = None) -> pd.DataFrame:
     Uses json_normalize on the standings array; flattens the nested `team`
     object so columns are team_id, team_name, team_abbreviation, etc., for
     joining with goal leaders on team_abbreviation.
+
+    Points are recalculated from wins and OT losses for accuracy; the raw
+    JSON 'points' value is not used. Formula: points = (wins * 2) + (ot_losses * 1).
     """
     path = path or STANDINGS_PATH
     with path.open(encoding="utf-8") as f:
@@ -50,6 +53,40 @@ def load_standings(path: Path | None = None) -> pd.DataFrame:
 
     # Rename team.* columns to team_* for consistent join key (team_abbreviation)
     df = df.rename(columns=lambda c: c.replace("team.", "team_", 1) if c.startswith("team.") else c)
+
+    # Raw API uses teamAbbrev / teamName; json_normalize flattens to teamAbbrev.default, teamName.default
+    if "team_abbreviation" not in df.columns:
+        if "teamAbbrev" in df.columns:
+            df["team_abbreviation"] = df["teamAbbrev"].apply(_get_default)
+        elif "teamAbbrev.default" in df.columns:
+            df["team_abbreviation"] = df["teamAbbrev.default"]
+    if "team_name" not in df.columns:
+        if "teamName" in df.columns:
+            df["team_name"] = df["teamName"].apply(_get_default)
+        elif "teamName.default" in df.columns:
+            df["team_name"] = df["teamName.default"]
+
+    # Normalize raw API camelCase to snake_case for silver/visualizer
+    renames = {
+        "gamesPlayed": "games_played",
+        "leagueSequence": "league_rank",
+        "goalFor": "goals_for",
+        "goalAgainst": "goals_against",
+        "goalDifferential": "goal_differential",
+    }
+    for old, new in renames.items():
+        if old in df.columns and new not in df.columns:
+            df[new] = df[old]
+
+    # otLosses -> ot_losses (standings may be raw API or saved snapshot)
+    if "otLosses" in df.columns and "ot_losses" not in df.columns:
+        df["ot_losses"] = df["otLosses"].fillna(0).astype(int)
+
+    # Recalculate points from wins and ot_losses; do not rely on raw JSON 'points'
+    if "wins" in df.columns and "ot_losses" in df.columns:
+        df["points"] = (df["wins"].fillna(0).astype(int) * 2) + (df["ot_losses"].fillna(0).astype(int) * 1)
+    elif "wins" in df.columns and "otLosses" in df.columns:
+        df["points"] = (df["wins"].fillna(0).astype(int) * 2) + (df["otLosses"].fillna(0).astype(int) * 1)
 
     return df
 

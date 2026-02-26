@@ -9,5 +9,8 @@ python-dotenv   # Managing .env configuration safely
 pandas          # Local data manipulation
 pyarrow         # Support for Parquet files (Azure/Cloud standard)
 
+# --- Visualization ---
+plotly          # Interactive charts (Gold layer)
+
 # --- Quality & Testing ---
 pytest          # The standard for Python testing

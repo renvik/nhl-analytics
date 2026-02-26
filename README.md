@@ -1,6 +1,6 @@
 # NHL Data Engineering Pipeline 🏒
 
-An end-to-end data pipeline to fetch, transform, and visualize NHL hockey data. This project follows a professional migration path from a **local Python ETL** foundation to an **Enterprise Azure Databricks** implementation using the Medallion Architecture.
+An end-to-end data pipeline to fetch, transform, and visualize NHL hockey data. This project follows a professional migration path from a **local Python ETL** foundation to an **Enterprise Azure Databricks** implementation using the Medallion Architecture. One goal is to find out how far you can go in developing a program with Cursor AI, both in terms of planning and actual coding.
 
 ## 🚀 Roadmap: From Local to Cloud
 - **Phase 1 (Current):** Local Python ETL. Raw JSON ingestion, Pydantic validation, and local Parquet storage.

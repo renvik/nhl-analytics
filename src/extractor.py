@@ -127,6 +127,26 @@ def _build_team_standings(season: str, raw: Dict[str, Any]) -> TeamStandings:
     )
 
 
+STANDINGS_RAW_PATH = RAW_DATA_DIR / "standings_20242025_snapshot.json"
+
+
+async def fetch_standings_raw() -> str:
+    """Fetch standings for 2025-04-16 and save the entire raw JSON response.
+
+    Writes to data/raw/standings_20242025_snapshot.json so the processor
+    receives wins and otLosses for points recalculation.
+    """
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        resp = await client.get(STANDINGS_URL)
+        resp.raise_for_status()
+        data = resp.json()
+
+    RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with STANDINGS_RAW_PATH.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return str(STANDINGS_RAW_PATH)
+
+
 async def fetch_standings_snapshot() -> StandingsSnapshot:
     """Fetch the current NHL standings and parse into `StandingsSnapshot`."""
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
@@ -194,20 +214,22 @@ async def fetch_goal_leaders() -> str:
 
 
 async def main() -> None:
-    """Simple CLI entrypoint for manual testing."""
-    snapshot = await fetch_standings_snapshot()
-    print(f"Season: {snapshot.season}")
-    print(f"Teams in snapshot: {len(snapshot.teams)}")
-
-    # Print the first three teams as a smoke test
-    for ts in snapshot.teams[:3]:
-        print(
-            f"{ts.team.abbreviation}: {ts.points} pts, "
-            f"{ts.games_played} GP, GF={ts.goals_for}, GA={ts.goals_against}"
-        )
-
-    saved_path = save_snapshot(snapshot)
-    print(f"Snapshot saved to: {saved_path}")
+    """Fetch standings (raw JSON) for 2025-04-16 and save to Bronze."""
+    path = await fetch_standings_raw()
+    print(f"Raw standings saved to: {path}")
+    # Quick sanity check
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    standings = data.get("standings") or []
+    print(f"Teams in response: {len(standings)}")
+    for entry in standings[:3]:
+        abbr = entry.get("teamAbbrev")
+        if isinstance(abbr, dict):
+            abbr = abbr.get("default", "?")
+        w = entry.get("wins", "?")
+        ot = entry.get("otLosses", "?")
+        pts = entry.get("points", "?")
+        print(f"  {abbr}: wins={w}, otLosses={ot}, points={pts}")
 
 
 if __name__ == "__main__":
