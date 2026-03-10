@@ -7,6 +7,7 @@ See SILVER_PROCESSOR_PLAN.md for the full implementation plan.
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,28 @@ def _get_default(value: Any) -> Any:
     if isinstance(value, dict) and "default" in value:
         return value["default"]
     return value
+
+
+def validate_goal_leaders_20242025(data: dict[str, Any]) -> None:
+    """Validate that goal leaders data has Leon Draisaitl as top scorer with 52 goals (2024-25 regular season).
+
+    Raises ValueError if the "goals" key is missing, empty, or if the top entry is not Draisaitl with 52.
+    """
+    goals = data.get("goals")
+    if not goals or not isinstance(goals, list):
+        raise ValueError(
+            "Goal leaders JSON must contain a non-empty 'goals' list (regular-season goal leaders)."
+        )
+    sorted_goals = sorted(goals, key=lambda p: p.get("value", 0), reverse=True)
+    top = sorted_goals[0]
+    first = str(_get_default(top.get("firstName", ""))).strip()
+    last = str(_get_default(top.get("lastName", ""))).strip()
+    value = top.get("value")
+    if first != "Leon" or last != "Draisaitl" or value != 52:
+        raise ValueError(
+            f"Expected top goal scorer for 2024-25 to be Leon Draisaitl with 52 goals; "
+            f"got {first} {last} with {value} goals."
+        )
 
 
 def load_standings(path: Path | None = None) -> pd.DataFrame:
@@ -94,14 +117,29 @@ def load_standings(path: Path | None = None) -> pd.DataFrame:
 def load_goal_leaders(path: Path | None = None) -> pd.DataFrame:
     """Load goal leaders JSON into a flat DataFrame.
 
-    Builds a DataFrame from the goalsSh list; flattens firstName, lastName,
-    and teamName from {"default": "…"} dicts into plain strings.
+    Uses the "goals" list (regular-season goal leaders), not "goalsSh" (short-handed).
+    Validates that the top scorer is Leon Draisaitl with 52 goals for 2024-25.
+    Flattens firstName, lastName, and teamName from {"default": "…"} dicts into plain strings.
     """
     path = path or GOAL_LEADERS_PATH
     with path.open(encoding="utf-8") as f:
         data = json.load(f)
 
-    df = pd.DataFrame(data["goalsSh"])
+    if "goals" in data and data["goals"]:
+        validate_goal_leaders_20242025(data)
+        records = data["goals"]
+    elif "goalsSh" in data and data["goalsSh"]:
+        warnings.warn(
+            "Goal leaders file has only 'goalsSh' (short-handed); expected 'goals' for regular-season leaders. "
+            "Re-fetch from the API to get correct data.",
+            UserWarning,
+            stacklevel=2,
+        )
+        records = data["goalsSh"]
+    else:
+        raise ValueError("Goal leaders JSON must contain a non-empty 'goals' or 'goalsSh' list.")
+
+    df = pd.DataFrame(records)
 
     for col in ("firstName", "lastName", "teamName"):
         if col in df.columns:

@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 import httpx
 
 from .models import Record, StandingsSnapshot, Team, TeamStandings
+from .processor import validate_goal_leaders_20242025
 
 
 # Fixed endpoint for the final day of the 2024–2025 regular season
@@ -200,11 +201,16 @@ def save_snapshot(snapshot: StandingsSnapshot) -> str:
 
 
 async def fetch_goal_leaders() -> str:
-    """Fetch goal leaders for 2024–2025 and save raw JSON to Bronze (data/raw)."""
+    """Fetch goal leaders for 2024–2025 and save raw JSON to Bronze (data/raw).
+
+    Validates that top goal scorer is Leon Draisaitl with 52 goals; does not save if validation fails.
+    """
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         resp = await client.get(GOAL_LEADERS_URL)
         resp.raise_for_status()
         data = resp.json()
+
+    validate_goal_leaders_20242025(data)
 
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
     path = RAW_DATA_DIR / "goal_leaders_20242025.json"
