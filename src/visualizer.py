@@ -9,6 +9,7 @@ Output: in-memory figures; optionally write HTML to data/gold/.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +21,7 @@ try:
         GOAL_LEADERS_PATH,
         SILVER_PLAYER_STATS_PATH,
         STANDINGS_PATH,
+        TOP_50_SCORERS_PATH,
         load_goal_leaders,
         load_standings,
     )
@@ -28,6 +30,7 @@ except ImportError:
         GOAL_LEADERS_PATH,
         SILVER_PLAYER_STATS_PATH,
         STANDINGS_PATH,
+        TOP_50_SCORERS_PATH,
         load_goal_leaders,
         load_standings,
     )
@@ -38,19 +41,24 @@ GOLD_DATA_DIR = _BASE_DIR / "data" / "gold"
 
 def _top10_goal_scorers_df(
     *,
+    top50_path: Path | None = None,
     silver_path: Path | None = None,
     goal_leaders_path: Path | None = None,
 ) -> pd.DataFrame:
-    """Load goal leaders (or silver), sort by goals (value), take top 10."""
+    """Load Top 50 scorers CSV (preferred), or silver/goal leaders; take top 10 by goals."""
+    top50_path = top50_path or TOP_50_SCORERS_PATH
     silver_path = silver_path or SILVER_PLAYER_STATS_PATH
     goal_leaders_path = goal_leaders_path or GOAL_LEADERS_PATH
 
+    if top50_path.exists():
+        df = pd.read_csv(top50_path)
+        # CSV has player, value; already sorted by goals desc
+        top10 = df.head(10)[["player", "value"]].copy()
+        return top10.reset_index(drop=True)
     if silver_path.exists():
         df = pd.read_csv(silver_path)
     else:
         df = load_goal_leaders(goal_leaders_path)
-
-    # Dedupe by player (silver has one row per player; goal leaders already one per player)
     by_goals = df.sort_values("value", ascending=False)
     top10 = by_goals.head(10).copy()
     top10["player"] = (top10["firstName"].astype(str) + " " + top10["lastName"].astype(str)).str.strip()
@@ -59,14 +67,19 @@ def _top10_goal_scorers_df(
 
 def fig_top10_goal_scorers(
     *,
+    top50_path: Path | None = None,
     silver_path: Path | None = None,
     goal_leaders_path: Path | None = None,
 ) -> go.Figure:
     """
     Top 10 Goal Scorers: horizontal bar — Y: player name, X: goals.
-    Rank 1 (most goals) at top. Returns in-memory Plotly figure.
+    Rank 1 (most goals) at top. Uses data/silver/top_50_scorers.csv when present.
     """
-    top10 = _top10_goal_scorers_df(silver_path=silver_path, goal_leaders_path=goal_leaders_path)
+    top10 = _top10_goal_scorers_df(
+        top50_path=top50_path,
+        silver_path=silver_path,
+        goal_leaders_path=goal_leaders_path,
+    )
     # Plotly horizontal bar: first row in data is at bottom. Reverse so rank 1 is at top.
     top10 = top10.iloc[::-1].reset_index(drop=True)
 
@@ -99,6 +112,13 @@ def fig_league_standings(
     Rank 1 at top. Returns in-memory Plotly figure.
     """
     standings = load_standings(standings_path)
+    if len(standings) != 32:
+        warnings.warn(
+            f"Expected 32 NHL teams in standings, got {len(standings)}. "
+            "Re-run the extractor to refresh data/raw/standings_20242025_snapshot.json.",
+            UserWarning,
+            stacklevel=2,
+        )
     # Sort by league_rank; rank 1 at top means we show in ascending rank order, then reverse for bar order
     by_rank = standings.sort_values("league_rank").copy()
     by_rank = by_rank.rename(columns={"team_name": "team"})
@@ -111,16 +131,18 @@ def fig_league_standings(
         y="team",
         orientation="h",
         labels={"points": "Points", "team": "Team"},
-        title="League Standings",
+        title="NHL Standings 2024-2025",
         text="points",
     )
     fig.update_traces(textposition="outside")
+    n_teams = len(by_rank)
     fig.update_layout(
         yaxis={"categoryorder": "array", "categoryarray": by_rank["team"].tolist()},
         xaxis_title="Points",
         yaxis_title="",
         showlegend=False,
         margin=dict(l=20),
+        height=max(500, n_teams * 28),  # enough height so all teams are visible
     )
     return fig
 

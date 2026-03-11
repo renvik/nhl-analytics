@@ -20,7 +20,9 @@ SILVER_DATA_DIR = _BASE_DIR / "data" / "silver"
 
 STANDINGS_PATH = RAW_DATA_DIR / "standings_20242025_snapshot.json"
 GOAL_LEADERS_PATH = RAW_DATA_DIR / "goal_leaders_20242025.json"
+ALL_SKATERS_20242025_PATH = RAW_DATA_DIR / "all_skaters_20242025.json"
 SILVER_PLAYER_STATS_PATH = SILVER_DATA_DIR / "silver_player_stats.csv"
+TOP_50_SCORERS_PATH = SILVER_DATA_DIR / "top_50_scorers.csv"
 
 
 def _get_default(value: Any) -> Any:
@@ -33,6 +35,41 @@ def _get_default(value: Any) -> Any:
     if isinstance(value, dict) and "default" in value:
         return value["default"]
     return value
+
+
+def verify_draisaitl_goals_all_skaters(path: Path | None = None) -> None:
+    """Verify that Leon Draisaitl has 52 goals in the 2024-2025 skater summary file.
+
+    Loads data/raw/all_skaters_20242025.json (stats rest API format with "data" key),
+    finds Leon Draisaitl in the data list, and raises ValueError if his goals != 52.
+    """
+    path = path or ALL_SKATERS_20242025_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Skater summary file not found: {path}. Run the extractor to fetch it."
+        )
+    with path.open(encoding="utf-8") as f:
+        payload = json.load(f)
+    records = payload.get("data")
+    if not records or not isinstance(records, list):
+        raise ValueError(
+            "all_skaters_20242025.json must contain a non-empty 'data' list."
+        )
+    draisaitl = None
+    for r in records:
+        name = r.get("skaterFullName") or ""
+        if name == "Leon Draisaitl":
+            draisaitl = r
+            break
+    if draisaitl is None:
+        raise ValueError(
+            "Leon Draisaitl not found in all_skaters_20242025.json 'data' list."
+        )
+    goals = draisaitl.get("goals")
+    if goals != 52:
+        raise ValueError(
+            f"Expected Leon Draisaitl to have 52 goals in 2024-2025 skater summary; got {goals}."
+        )
 
 
 def validate_goal_leaders_20242025(data: dict[str, Any]) -> None:
@@ -77,17 +114,17 @@ def load_standings(path: Path | None = None) -> pd.DataFrame:
     # Rename team.* columns to team_* for consistent join key (team_abbreviation)
     df = df.rename(columns=lambda c: c.replace("team.", "team_", 1) if c.startswith("team.") else c)
 
-    # Raw API uses teamAbbrev / teamName; json_normalize flattens to teamAbbrev.default, teamName.default
+    # Raw API uses teamAbbrev / teamName; json_normalize may flatten to .default or leave as dict
     if "team_abbreviation" not in df.columns:
-        if "teamAbbrev" in df.columns:
-            df["team_abbreviation"] = df["teamAbbrev"].apply(_get_default)
-        elif "teamAbbrev.default" in df.columns:
+        if "teamAbbrev.default" in df.columns:
             df["team_abbreviation"] = df["teamAbbrev.default"]
+        elif "teamAbbrev" in df.columns:
+            df["team_abbreviation"] = df["teamAbbrev"].apply(_get_default)
     if "team_name" not in df.columns:
-        if "teamName" in df.columns:
+        if "teamName.default" in df.columns:
+            df["team_name"] = df["teamName.default"].astype(str)
+        elif "teamName" in df.columns:
             df["team_name"] = df["teamName"].apply(_get_default)
-        elif "teamName.default" in df.columns:
-            df["team_name"] = df["teamName.default"]
 
     # Normalize raw API camelCase to snake_case for silver/visualizer
     renames = {
@@ -111,6 +148,31 @@ def load_standings(path: Path | None = None) -> pd.DataFrame:
     elif "wins" in df.columns and "otLosses" in df.columns:
         df["points"] = (df["wins"].fillna(0).astype(int) * 2) + (df["otLosses"].fillna(0).astype(int) * 1)
 
+    return df
+
+
+def build_top_50_scorers(path: Path | None = None, out_path: Path | None = None) -> pd.DataFrame:
+    """Load all_skaters JSON, sort by goals descending, take Top 50, save to CSV.
+
+    CSV columns: player (skaterFullName), value (goals) for use by the visualizer.
+    """
+    path = path or ALL_SKATERS_20242025_PATH
+    out_path = out_path or TOP_50_SCORERS_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Skater summary file not found: {path}. Run the extractor to fetch it."
+        )
+    with path.open(encoding="utf-8") as f:
+        payload = json.load(f)
+    records = payload.get("data")
+    if not records or not isinstance(records, list):
+        raise ValueError("all_skaters JSON must contain a non-empty 'data' list.")
+    df = pd.DataFrame(records)
+    df = df.sort_values("goals", ascending=False).head(50).copy()
+    df["player"] = df["skaterFullName"]
+    df["value"] = df["goals"]
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    df[["player", "value"]].to_csv(out_path, index=False)
     return df
 
 
@@ -150,6 +212,11 @@ def load_goal_leaders(path: Path | None = None) -> pd.DataFrame:
 
 if __name__ == "__main__":
     SILVER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    if ALL_SKATERS_20242025_PATH.exists():
+        verify_draisaitl_goals_all_skaters()
+        build_top_50_scorers()
+        print(f"Wrote {TOP_50_SCORERS_PATH}")
 
     standings = load_standings()
     goal_leaders = load_goal_leaders()

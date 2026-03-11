@@ -17,6 +17,15 @@ STANDINGS_URL = "https://api-web.nhle.com/v1/standings/2025-04-16"
 # Skater stats leaders: season 20242025, 2 = goals
 GOAL_LEADERS_URL = "https://api-web.nhle.com/v1/skater-stats-leaders/20242025/2"
 
+# 2024-2025 skater summary (stats rest API): top 100 by goals, regular season
+SKATER_SUMMARY_20242025_URL = (
+    "https://api.nhle.com/stats/rest/en/skater/summary"
+    "?isAggregate=false&isGame=false"
+    "&sort=[{\"property\":\"goals\",\"direction\":\"DESC\"}]"
+    "&start=0&limit=100"
+    "&cayenneExp=gameTypeId=2 and seasonId=20242025"
+)
+
 # Project-relative data directory (…/nhl-analytics/data/raw)
 _BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DATA_DIR = _BASE_DIR / "data" / "raw"
@@ -129,6 +138,7 @@ def _build_team_standings(season: str, raw: Dict[str, Any]) -> TeamStandings:
 
 
 STANDINGS_RAW_PATH = RAW_DATA_DIR / "standings_20242025_snapshot.json"
+ALL_SKATERS_RAW_PATH = RAW_DATA_DIR / "all_skaters_20242025.json"
 
 
 async def fetch_standings_raw() -> str:
@@ -217,6 +227,23 @@ async def fetch_goal_leaders() -> str:
     with path.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return str(path)
+
+
+async def fetch_all_skaters_raw() -> str:
+    """Fetch 2024-2025 skater summary (top 100 by goals) and save full JSON to data/raw.
+
+    Uses the stats rest API; the skater list is in the response's "data" key.
+    Saves the full JSON response to data/raw/all_skaters_20242025.json.
+    """
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        resp = await client.get(SKATER_SUMMARY_20242025_URL)
+        resp.raise_for_status()
+        data = resp.json()
+
+    RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with ALL_SKATERS_RAW_PATH.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return str(ALL_SKATERS_RAW_PATH)
 
 
 async def main() -> None:
